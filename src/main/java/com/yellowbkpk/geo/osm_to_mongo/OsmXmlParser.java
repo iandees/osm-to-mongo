@@ -17,6 +17,7 @@ import org.xml.sax.SAXException;
 import org.xml.sax.helpers.DefaultHandler;
 
 import com.mongodb.BasicDBObject;
+import com.mongodb.DBObject;
 
 public class OsmXmlParser {
 
@@ -37,7 +38,8 @@ public class OsmXmlParser {
     class OsmHandler extends DefaultHandler {
 
         private MongoDbOutput output;
-        private BasicDBObject record;
+        private BasicDBObject record = new BasicDBObject();
+        private List<DBObject> records = new LinkedList<DBObject>();
 
         public OsmHandler(MongoDbOutput output) {
             this.output = output;
@@ -63,9 +65,15 @@ public class OsmXmlParser {
                 fillDefaults(attributes);
             }
         }
-        
+
         public void endElement(String uri, String localName, String qName)
-        throws SAXException {
+                throws SAXException {
+            records.add(record);
+            record = new BasicDBObject();
+            if (records.size() > 3000) {
+                output.addNodes(records);
+                records.clear();
+            }
         }
 
         private void fillLoc(Attributes attributes) {
