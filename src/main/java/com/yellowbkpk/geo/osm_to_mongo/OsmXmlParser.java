@@ -37,6 +37,7 @@ public class OsmXmlParser {
         ISODateTimeFormat.dateTimeNoMillis();
     class OsmHandler extends DefaultHandler {
 
+        private static final int ACCUMULATION = 1;
         private MongoDbOutput output;
         private BasicDBObject record = new BasicDBObject();
         private List<DBObject> records = new LinkedList<DBObject>();
@@ -48,31 +49,55 @@ public class OsmXmlParser {
         @SuppressWarnings("unchecked")
         public void startElement(String uri, String localName, String qName,
                 Attributes attributes) throws SAXException {
-            if("node".equals(localName)) {
+            if("node".equals(qName)) {
                 fillDefaults(attributes);
                 fillLoc(attributes);
                 record.append("ways", new LinkedList<Long>());
                 record.append("relations", new LinkedList<Long>());
-            } else if("nd".equals(localName)) {
+            } else if("nd".equals(qName)) {
                 ((List<Long>) record.get("nodes")).add(Long.valueOf(attributes.getValue("ref")));
-            } else if("tag".equals(localName)) {
-                ((List<BasicDBObject>) record.get("tags")).add(new BasicDBObject(attributes.getValue("k"), attributes.getValue("v")));
-            } else if("way".equals(localName)) {
+            } else if("tag".equals(qName)) {
+                BasicDBObject tagList = (BasicDBObject) record.get("tags");
+                tagList.append(clean(attributes.getValue("k")),
+                                clean(attributes.getValue("v")));
+            } else if("nd".equals(qName)) {
+                List<Long> refList = (List<Long>) record.get("nodes");
+                refList.add(Long.parseLong(attributes.getValue("ref")));
+            } else if("member".equals(qName)) {
+                BasicDBObject member = new BasicDBObject();
+                member.append("type", attributes.getValue("type"));
+                member.append("ref", Long.parseLong(attributes.getValue("ref")));
+                member.append("role", attributes.getValue("role"));
+                ((List<BasicDBObject>) record.get("members")).add(member);
+            } else if("way".equals(qName)) {
                 fillDefaults(attributes);
                 record.append("nodes", new LinkedList<Long>());
                 record.append("relations", new LinkedList<Long>());
-            } else if("relation".equals(localName)) {
+            } else if("relation".equals(qName)) {
                 fillDefaults(attributes);
+                record.append("members", new LinkedList<BasicDBObject>());
             }
+        }
+
+        private String clean(String attributes) {
+            return attributes.replaceAll("\\.", ",,");
         }
 
         public void endElement(String uri, String localName, String qName)
                 throws SAXException {
-            records.add(record);
-            record = new BasicDBObject();
-            if (records.size() > 3000) {
-                output.addNodes(records);
-                records.clear();
+            if ("node".equals(qName)) {
+                records.add(record);
+                record.clear();
+                if (records.size() > ACCUMULATION) {
+                    output.addNodes(records);
+                    records.clear();
+                }
+            } else if ("way".equals(qName)) {
+                output.addWay(record);
+                record.clear();
+            } else if ("relation".equals(qName)) {
+                output.addRelation(record);
+                record.clear();
             }
         }
 
@@ -86,7 +111,7 @@ public class OsmXmlParser {
         private void fillDefaults(Attributes attributes) {
             record.append("id", Long.valueOf(attributes.getValue("id")));
             record.append("timestamp", parseIsoTime(attributes.getValue("timestamp")));
-            record.append("tags", new LinkedList<BasicDBObject>());
+            record.append("tags", new BasicDBObject());
             applyIfNotNull(attributes, "user");
             applyIfNotNull(attributes, "uid");
             applyIfNotNull(attributes, "version");
@@ -101,8 +126,8 @@ public class OsmXmlParser {
             }
         }
 
-        private DateTime parseIsoTime(String value) {
-            return XML_DATE_TIME_FORMAT.parseDateTime(value);
+        private long parseIsoTime(String value) {
+            return XML_DATE_TIME_FORMAT.parseDateTime(value).getMillis();
         }
     }
 
