@@ -9,7 +9,6 @@ import javax.xml.parsers.ParserConfigurationException;
 import javax.xml.parsers.SAXParser;
 import javax.xml.parsers.SAXParserFactory;
 
-import org.joda.time.DateTime;
 import org.joda.time.format.DateTimeFormatter;
 import org.joda.time.format.ISODateTimeFormat;
 import org.xml.sax.Attributes;
@@ -87,17 +86,17 @@ public class OsmXmlParser {
                 throws SAXException {
             if ("node".equals(qName)) {
                 records.add(record);
-                record.clear();
+                record = new BasicDBObject();
                 if (records.size() > ACCUMULATION) {
                     output.addNodes(records);
                     records.clear();
                 }
             } else if ("way".equals(qName)) {
                 output.addWay(record);
-                record.clear();
+                record = new BasicDBObject();
             } else if ("relation".equals(qName)) {
                 output.addRelation(record);
-                record.clear();
+                record = new BasicDBObject();
             }
         }
 
@@ -113,9 +112,9 @@ public class OsmXmlParser {
             record.append("timestamp", parseIsoTime(attributes.getValue("timestamp")));
             record.append("tags", new BasicDBObject());
             applyIfNotNull(attributes, "user");
-            applyIfNotNull(attributes, "uid");
-            applyIfNotNull(attributes, "version");
-            applyIfNotNull(attributes, "changeset");
+            applyNumIfNotNull(attributes, "uid");
+            applyNumIfNotNull(attributes, "version");
+            applyNumIfNotNull(attributes, "changeset");
             
         }
 
@@ -123,6 +122,13 @@ public class OsmXmlParser {
             String string = attributes.getValue(attr);
             if(string != null) {
                 record.append(attr, string);
+            }
+        }
+
+        private void applyNumIfNotNull(Attributes attributes, String attr) {
+            String string = attributes.getValue(attr);
+            if(string != null) {
+                record.append(attr, Integer.parseInt(string));
             }
         }
 
